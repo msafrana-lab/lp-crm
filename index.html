@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Libre-Passage · Capital Y</title>
+<meta name="robots" content="noindex, nofollow">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --fuchsia: #EB1548;
+    --rose: #F64971;
+    --corail: #EF4A72;
+    --peche: #FAAA70;
+    --saumon: #F99951;
+    --vert: #5C8270;
+    --vert-fonce: #4C6C5D;
+    --anthracite: #4C4A4B;
+    --gris-clair: #E7E6E6;
+    --fond: #FAFAF9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Arial Narrow', Arial, sans-serif; color: var(--anthracite); background: var(--fond); font-size: 15px; }
+
+  /* ---------- Login ---------- */
+  #login-screen { display: none; min-height: 100vh; align-items: center; justify-content: center; flex-direction: column; gap: 24px; }
+  .logo-y { font-size: 64px; font-weight: bold; background: linear-gradient(180deg, var(--corail), var(--saumon), var(--peche)); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: Georgia, serif; }
+  #login-screen h1 { font-size: 22px; font-weight: normal; }
+  #btn-login { background: var(--anthracite); color: white; border: none; padding: 12px 28px; font-size: 15px; cursor: pointer; border-radius: 4px; font-family: inherit; }
+  #btn-login:hover { background: #333; }
+  #login-error { color: var(--fuchsia); max-width: 420px; text-align: center; }
+
+  /* ---------- Layout ---------- */
+  #app { display: none; }
+  header { background: white; border-bottom: 1px solid var(--gris-clair); padding: 0 24px; display: flex; align-items: center; gap: 28px; height: 58px; position: sticky; top: 0; z-index: 50; }
+  header .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+  header .brand .y { font-size: 28px; font-weight: bold; background: linear-gradient(180deg, var(--corail), var(--saumon)); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: Georgia, serif; }
+  nav { display: flex; gap: 4px; flex: 1; }
+  nav button { background: none; border: none; padding: 8px 14px; font-family: inherit; font-size: 15px; color: var(--anthracite); cursor: pointer; border-bottom: 3px solid transparent; }
+  nav button.active { border-bottom-color: var(--fuchsia); font-weight: bold; }
+  nav button:hover { background: var(--fond); }
+  #user-email { font-size: 12px; color: #999; }
+  #btn-logout { background: none; border: 1px solid var(--gris-clair); padding: 5px 12px; cursor: pointer; font-family: inherit; border-radius: 3px; color: var(--anthracite); }
+  main { max-width: 1300px; margin: 0 auto; padding: 24px; }
+  h2 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #999; font-size: 13px; margin-bottom: 18px; }
+
+  /* ---------- Dashboard ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .kpi { background: white; border: 1px solid var(--gris-clair); border-radius: 6px; padding: 16px; }
+  .kpi .num { font-size: 30px; font-weight: bold; color: var(--fuchsia); }
+  .kpi .num.vert { color: var(--vert); }
+  .kpi .num.gris { color: var(--anthracite); }
+  .kpi .lbl { font-size: 12.5px; color: #888; margin-top: 2px; }
+  .dash-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .dash-cols { grid-template-columns: 1fr; } }
+  .panel { background: white; border: 1px solid var(--gris-clair); border-radius: 6px; padding: 18px; }
+  .panel h3 { font-size: 15px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--gris-clair); }
+  .todo-item { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px dotted var(--gris-clair); cursor: pointer; gap: 8px; }
+  .todo-item:hover { background: var(--fond); }
+  .todo-item .d { color: #999; font-size: 12.5px; white-space: nowrap; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 13.5px; }
+  .bar-row .lbl { width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-row .bar { height: 13px; background: linear-gradient(90deg, var(--corail), var(--saumon)); border-radius: 3px; min-width: 2px; }
+  .bar-row .n { color: #888; font-size: 12px; }
+
+  /* ---------- Pipeline ---------- */
+  .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .filters select, .filters input { padding: 7px 10px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 14px; background: white; color: var(--anthracite); }
+  .filters input { width: 220px; }
+  table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--gris-clair); border-radius: 6px; overflow: hidden; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: #999; padding: 10px 12px; border-bottom: 2px solid var(--gris-clair); background: #FCFCFB; cursor: pointer; white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid #F1F0EF; font-size: 14px; vertical-align: top; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #FFF7F3; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; white-space: nowrap; }
+  .tag.A { background: #FDE8EE; color: var(--fuchsia); }
+  .tag.B { background: #FDF3E7; color: #C77A2E; }
+  .tag.C { background: #EEEEEE; color: #888; }
+  .tag.v0 { background: var(--anthracite); color: white; }
+  .tag.v1 { background: #FDE8EE; color: var(--fuchsia); }
+  .tag.v2 { background: #FDF3E7; color: #C77A2E; }
+  .tag.v3 { background: #EEEEEE; color: #888; }
+  .tag.st { background: #EDF2EF; color: var(--vert-fonce); }
+  .warn { color: var(--fuchsia); font-size: 12px; }
+
+  /* ---------- Fiche (drawer) ---------- */
+  #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 100; }
+  #drawer { display: none; position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 96vw); background: white; z-index: 101; overflow-y: auto; box-shadow: -4px 0 24px rgba(0,0,0,.15); }
+  #drawer .head { padding: 20px 24px 14px; border-bottom: 1px solid var(--gris-clair); position: sticky; top: 0; background: white; z-index: 5; }
+  #drawer .head h2 { margin-bottom: 2px; }
+  #drawer .close { position: absolute; top: 16px; right: 18px; background: none; border: none; font-size: 22px; cursor: pointer; color: #999; }
+  #drawer .body { padding: 20px 24px 60px; }
+  .sect { margin-bottom: 24px; }
+  .sect h4 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--vert-fonce); margin-bottom: 10px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 5px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; font-size: 14px; }
+  .grid2 .k { color: #999; font-size: 12px; }
+  .grid2 .v { margin-bottom: 6px; word-break: break-word; }
+  .grid2 .v a { color: var(--vert-fonce); }
+  .statut-row { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .statut-row select { padding: 7px 10px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 14px; flex: 1; min-width: 220px; }
+  .btn { background: var(--fuchsia); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 14px; }
+  .btn:hover { opacity: .9; }
+  .btn.sec { background: white; color: var(--anthracite); border: 1px solid var(--gris-clair); }
+  .btn.sm { padding: 5px 10px; font-size: 13px; }
+  .check-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--gris-clair); }
+  .check-item input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--vert); cursor: pointer; }
+  .check-item.done span { color: #AAA; text-decoration: line-through; }
+  .tl-item { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px dotted var(--gris-clair); font-size: 14px; }
+  .tl-item .dt { color: #999; font-size: 12.5px; white-space: nowrap; width: 84px; }
+  .tl-item .type { font-weight: bold; }
+  .tl-item .afaire { color: var(--saumon); font-weight: bold; }
+  .tl-item .fait { color: var(--vert); }
+  .tl-item .actions-btns { margin-left: auto; display: flex; gap: 6px; }
+  .add-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; background: var(--fond); padding: 12px; border-radius: 6px; }
+  .add-form select, .add-form input, .add-form textarea { padding: 7px 9px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 14px; background: white; }
+  .add-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 52px; }
+  .notes-area { width: 100%; min-height: 110px; padding: 10px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 13.5px; resize: vertical; }
+  .muted { color: #999; font-size: 13px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--anthracite); color: white; padding: 10px 22px; border-radius: 20px; font-size: 14px; z-index: 200; display: none; }
+  .rappel { background: #FDF3E7; border: 1px solid var(--peche); border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="logo-y">Y</div>
+  <h1>CRM Libre-Passage · Capital Y</h1>
+  <button id="btn-login">Se connecter avec Google</button>
+  <div id="login-error"></div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="brand"><span class="y">Y</span> CRM Libre-Passage</div>
+    <nav>
+      <button data-view="dashboard" class="active">Tableau de bord</button>
+      <button data-view="pipeline">Pipeline</button>
+      <button data-view="preflight">Pré-flight vague 1</button>
+    </nav>
+    <span id="user-email"></span>
+    <button id="btn-logout">Déconnexion</button>
+  </header>
+  <main id="main"></main>
+</div>
+
+<div id="overlay"></div>
+<div id="drawer"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://fqnohqfeypwuyhscwomd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_W-645Y7uA7Cypyxv9_73VA_uUX_QDtX';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const STATUTS = [
+  'À qualifier', 'Appel préalable', 'À envoyer',
+  'Prêt à envoyer (pack 13.07.2026, dates à caler)',
+  'LinkedIn J-3 envoyé', 'Email J0 envoyé', 'Relance J+10 envoyée', 'Relance J+24 envoyée',
+  'Réponse reçue', 'Café planifié', 'Café fait', 'Partenariat en discussion', 'Partenariat signé',
+  'VAGUE 0 — café direct', 'Via LinkedIn', 'Via formulaire site',
+  'Sans suite', 'En veille', 'Écarté'
+];
+const TYPES_ACTION = {
+  linkedin_j3: 'Note LinkedIn J-3', email_j0: 'Email J0', relance_j10: 'Relance J+10',
+  relance_j24: 'Relance J+24', appel: 'Appel', cafe: 'Café', rdv: 'RDV',
+  reponse: 'Réponse reçue', note: 'Note', autre: 'Autre'
+};
+
+let cibles = [], actions = [], checklist = [], vagues = [];
+let view = 'dashboard', currentCible = null;
+let filtres = { vague: '', canton: '', statut: '', prio: '', q: '' };
+let tri = { col: 'score', desc: true };
+
+const $ = s => document.querySelector(s);
+const esc = s => (s == null ? '' : String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
+const fmtD = d => d ? new Date(d).toLocaleDateString('fr-CH', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '';
+const toast = m => { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 2200); };
+
+// ---------- Auth ----------
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { await postLogin(session); } else { showLogin(); }
+  sb.auth.onAuthStateChange(async (ev, s) => {
+    if (ev === 'SIGNED_IN' && s && $('#app').style.display !== 'block') await postLogin(s);
+    if (ev === 'SIGNED_OUT') { location.reload(); }
+  });
+}
+function showLogin() {
+  $('#login-screen').style.display = 'flex';
+  $('#app').style.display = 'none';
+}
+async function postLogin(session) {
+  // Test d'accès : si l'email n'est pas dans la liste blanche, RLS renvoie 0 ligne partout
+  const { data, error } = await sb.from('allowed_emails').select('email').limit(1);
+  if (error || !data || data.length === 0) {
+    await sb.auth.signOut();
+    showLogin();
+    $('#login-error').textContent = 'Accès refusé pour ' + (session.user?.email || 'ce compte') + '. Seuls les comptes autorisés peuvent ouvrir ce CRM.';
+    return;
+  }
+  $('#login-screen').style.display = 'none';
+  $('#app').style.display = 'block';
+  $('#user-email').textContent = session.user.email;
+  await loadAll();
+  render();
+}
+$('#btn-login').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+$('#btn-logout').onclick = () => sb.auth.signOut();
+
+// ---------- Data ----------
+async function loadAll() {
+  const [c, a, k, v] = await Promise.all([
+    sb.from('cibles').select('*').order('score', { ascending: false }),
+    sb.from('actions').select('*').order('created_at', { ascending: false }),
+    sb.from('checklist').select('*').order('id'),
+    sb.from('vagues').select('*').order('numero')
+  ]);
+  cibles = c.data || []; actions = a.data || []; checklist = k.data || []; vagues = v.data || [];
+}
+
+// ---------- Navigation ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  view = b.dataset.view;
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  render();
+});
+
+function render() {
+  if (view === 'dashboard') renderDashboard();
+  else if (view === 'pipeline') renderPipeline();
+  else renderPreflight();
+}
+
+// ---------- Dashboard ----------
+function renderDashboard() {
+  const actifs = cibles.filter(c => !['Écarté', 'En veille', 'Sans suite'].includes(c.statut));
+  const envoyes = cibles.filter(c => /envoyé|Relance/.test(c.statut)).length;
+  const reponses = cibles.filter(c => /Réponse|Café|Partenariat/.test(c.statut)).length;
+  const cafes = cibles.filter(c => /Café fait|Partenariat/.test(c.statut)).length;
+  const signes = cibles.filter(c => c.statut === 'Partenariat signé').length;
+  const aFaire = actions.filter(a => a.statut === 'a_faire').sort((x, y) => (x.date_prevue || '9999') < (y.date_prevue || '9999') ? -1 : 1);
+
+  const parStatut = {};
+  cibles.forEach(c => parStatut[c.statut] = (parStatut[c.statut] || 0) + 1);
+  const maxN = Math.max(...Object.values(parStatut), 1);
+
+  $('#main').innerHTML = `
+    <h2>Tableau de bord</h2>
+    <div class="sub">Objectif : CHF 10 mios d'encours d'ici décembre 2027 · ${cibles.length} cibles en base</div>
+    <div class="kpis">
+      <div class="kpi"><div class="num gris">${actifs.length}</div><div class="lbl">Cibles actives</div></div>
+      <div class="kpi"><div class="num">${envoyes}</div><div class="lbl">Séquences lancées</div></div>
+      <div class="kpi"><div class="num">${reponses}</div><div class="lbl">Réponses obtenues</div></div>
+      <div class="kpi"><div class="num vert">${cafes}</div><div class="lbl">Cafés faits</div></div>
+      <div class="kpi"><div class="num vert">${signes}</div><div class="lbl">Partenariats signés</div></div>
+    </div>
+    <div class="dash-cols">
+      <div class="panel">
+        <h3>Actions à faire (${aFaire.length})</h3>
+        ${aFaire.length === 0 ? '<div class="muted">Rien en attente. Ajoutez des actions depuis les fiches cibles.</div>' : ''}
+        ${aFaire.slice(0, 15).map(a => {
+          const c = cibles.find(x => x.id === a.cible_id);
+          return `<div class="todo-item" onclick="openFiche(${a.cible_id})">
+            <span><b>${TYPES_ACTION[a.type] || a.type}</b> · ${esc(c ? c.societe : '?')}</span>
+            <span class="d">${a.date_prevue ? fmtD(a.date_prevue) : 'sans date'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="panel">
+        <h3>Répartition par statut</h3>
+        ${Object.entries(parStatut).sort((a, b) => b[1] - a[1]).map(([s, n]) =>
+          `<div class="bar-row"><span class="lbl" title="${esc(s)}">${esc(s)}</span><span class="bar" style="width:${Math.round(n / maxN * 140)}px"></span><span class="n">${n}</span></div>`
+        ).join('')}
+      </div>
+    </div>`;
+}
+
+// ---------- Pipeline ----------
+function renderPipeline() {
+  let rows = cibles.filter(c =>
+    (!filtres.vague || String(c.vague) === filtres.vague) &&
+    (!filtres.canton || c.canton === filtres.canton) &&
+    (!filtres.statut || c.statut === filtres.statut) &&
+    (!filtres.prio || c.priorite === filtres.prio) &&
+    (!filtres.q || (c.societe + ' ' + (c.decideur || '') + ' ' + (c.email_retenu || '')).toLowerCase().includes(filtres.q.toLowerCase()))
+  );
+  rows.sort((a, b) => {
+    let va = a[tri.col], vb = b[tri.col];
+    if (va == null) return 1; if (vb == null) return -1;
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = String(vb).toLowerCase(); }
+    return (va < vb ? -1 : va > vb ? 1 : 0) * (tri.desc ? -1 : 1);
+  });
+  const cantons = [...new Set(cibles.map(c => c.canton).filter(Boolean))].sort();
+  const statuts = [...new Set(cibles.map(c => c.statut).filter(Boolean))].sort();
+
+  $('#main').innerHTML = `
+    <h2>Pipeline</h2>
+    <div class="sub">${rows.length} cible(s) affichée(s) sur ${cibles.length}</div>
+    <div class="filters">
+      <input placeholder="Rechercher société, décideur, email…" value="${esc(filtres.q)}" oninput="filtres.q=this.value;renderPipeline()">
+      <select onchange="filtres.vague=this.value;renderPipeline()">
+        <option value="">Toutes vagues</option>
+        ${vagues.map(v => `<option value="${v.numero}" ${filtres.vague == v.numero ? 'selected' : ''}>Vague ${v.numero}</option>`).join('')}
+      </select>
+      <select onchange="filtres.canton=this.value;renderPipeline()">
+        <option value="">Tous cantons</option>
+        ${cantons.map(x => `<option ${filtres.canton === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}
+      </select>
+      <select onchange="filtres.prio=this.value;renderPipeline()">
+        <option value="">Toutes prios</option><option ${filtres.prio === 'A' ? 'selected' : ''}>A</option><option ${filtres.prio === 'B' ? 'selected' : ''}>B</option><option ${filtres.prio === 'C' ? 'selected' : ''}>C</option>
+      </select>
+      <select onchange="filtres.statut=this.value;renderPipeline()">
+        <option value="">Tous statuts</option>
+        ${statuts.map(x => `<option ${filtres.statut === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}
+      </select>
+    </div>
+    <table>
+      <thead><tr>
+        ${[['societe', 'Société'], ['canton', 'Canton'], ['decideur', 'Décideur'], ['score', 'Score'], ['priorite', 'Prio'], ['vague', 'Vague'], ['statut', 'Statut']].map(([k, l]) =>
+          `<th onclick="setTri('${k}')">${l}${tri.col === k ? (tri.desc ? ' ▾' : ' ▴') : ''}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${rows.map(c => `<tr onclick="openFiche(${c.id})">
+          <td><b>${esc(c.societe)}</b>${/⚠️|ALERTE|domaine mort|pas de MX/.test((c.email_retenu || '') + (c.notes || '')) ? ' <span class="warn">⚠</span>' : ''}</td>
+          <td>${esc(c.canton)}</td>
+          <td>${esc(c.decideur || '')}</td>
+          <td>${c.score ?? ''}</td>
+          <td><span class="tag ${c.priorite}">${c.priorite || ''}</span></td>
+          <td><span class="tag v${c.vague}">V${c.vague ?? '–'}</span></td>
+          <td><span class="tag st">${esc(c.statut)}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+function setTri(col) { tri.desc = tri.col === col ? !tri.desc : true; tri.col = col; renderPipeline(); }
+
+// ---------- Pré-flight ----------
+function renderPreflight() {
+  const v1 = cibles.filter(c => c.vague === 1 && checklist.some(k => k.cible_id === c.id));
+  $('#main').innerHTML = `
+    <h2>Pré-flight vague 1</h2>
+    <div class="sub">Checklist avant envoi pour les cibles prêtes (données de qualification du 12-18.06 : à revérifier avant J0)</div>
+    <div class="rappel">Rappels : emails un à un, jamais d'envoi de masse · adresses déduites = test bcc obligatoire · CGA Conseils = vague 0, café direct, jamais de cold email.</div>
+    ${v1.map(c => {
+      const items = checklist.filter(k => k.cible_id === c.id);
+      const done = items.filter(i => i.fait).length;
+      return `<div class="panel" style="margin-bottom:14px">
+        <h3 style="display:flex;justify-content:space-between;cursor:pointer" onclick="openFiche(${c.id})">
+          <span>${esc(c.societe)} — ${esc(c.decideur || '')}</span>
+          <span style="color:${done === items.length ? 'var(--vert)' : 'var(--saumon)'}">${done}/${items.length}</span>
+        </h3>
+        ${items.map(i => `<label class="check-item ${i.fait ? 'done' : ''}">
+          <input type="checkbox" ${i.fait ? 'checked' : ''} onchange="toggleCheck(${i.id}, this.checked)">
+          <span>${esc(i.item)}</span>
+          ${i.date_verif ? `<span class="muted">(${fmtD(i.date_verif)})</span>` : ''}
+        </label>`).join('')}
+      </div>`;
+    }).join('') || '<div class="muted">Aucune cible avec checklist.</div>'}`;
+}
+async function toggleCheck(id, val) {
+  const { error } = await sb.from('checklist').update({ fait: val, date_verif: val ? new Date().toISOString().slice(0, 10) : null }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message); return; }
+  const it = checklist.find(k => k.id === id);
+  if (it) { it.fait = val; it.date_verif = val ? new Date().toISOString().slice(0, 10) : null; }
+  if (view === 'preflight') renderPreflight();
+  if (currentCible) openFiche(currentCible, true);
+}
+
+// ---------- Fiche ----------
+function openFiche(id, keep) {
+  const c = cibles.find(x => x.id === id);
+  if (!c) return;
+  currentCible = id;
+  const acts = actions.filter(a => a.cible_id === id);
+  const items = checklist.filter(k => k.cible_id === id);
+  $('#overlay').style.display = 'block';
+  $('#drawer').style.display = 'block';
+  $('#drawer').innerHTML = `
+    <div class="head">
+      <button class="close" onclick="closeFiche()">✕</button>
+      <h2>${esc(c.societe)}</h2>
+      <div class="muted">${esc(c.canton || '')} · ${esc(c.zone || '')} · Score ${c.score ?? '–'} · Prio ${c.priorite || '–'} · Vague ${c.vague ?? '–'}</div>
+    </div>
+    <div class="body">
+      <div class="sect">
+        <h4>Statut</h4>
+        <div class="statut-row">
+          <select id="f-statut">${STATUTS.map(s => `<option ${c.statut === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}${STATUTS.includes(c.statut) ? '' : `<option selected>${esc(c.statut)}</option>`}</select>
+          <button class="btn" onclick="saveStatut(${c.id})">Enregistrer</button>
+        </div>
+      </div>
+      <div class="sect">
+        <h4>Contact</h4>
+        <div class="grid2">
+          <div><div class="k">Décideur</div><div class="v">${esc(c.decideur || '–')}${c.fonction ? ' · ' + esc(c.fonction) : ''}</div></div>
+          <div><div class="k">Téléphone</div><div class="v">${esc(c.telephone || '–')}</div></div>
+          <div><div class="k">Email retenu</div><div class="v"><b>${esc(c.email_retenu || '–')}</b></div></div>
+          <div><div class="k">Statut email</div><div class="v">${esc(c.statut_email || '–')}</div></div>
+          <div><div class="k">Email direct décideur</div><div class="v">${esc(c.email_direct || '–')}</div></div>
+          <div><div class="k">Source</div><div class="v">${esc(c.source_email || '–')}</div></div>
+          <div><div class="k">LinkedIn</div><div class="v">${c.linkedin_url && c.linkedin_url.startsWith('http') ? `<a href="${esc(c.linkedin_url)}" target="_blank" rel="noopener">profil ↗</a>` : esc(c.linkedin_url || '–')}${c.linkedin_confiance ? ' <span class="muted">(' + esc(c.linkedin_confiance) + ')</span>' : ''}</div></div>
+          <div><div class="k">FINMA</div><div class="v">${esc(c.finma || '–')}</div></div>
+          <div><div class="k">Adresse</div><div class="v">${esc(c.adresse || '–')}</div></div>
+          <div><div class="k">Domaine vérifié</div><div class="v">${esc(c.domaine_verifie || '–')}</div></div>
+        </div>
+      </div>
+      ${c.fait_accroche ? `<div class="sect"><h4>Fait d'accroche</h4><div style="font-size:14px">${esc(c.fait_accroche)}</div></div>` : ''}
+      ${items.length ? `<div class="sect"><h4>Checklist pré-flight</h4>
+        ${items.map(i => `<label class="check-item ${i.fait ? 'done' : ''}">
+          <input type="checkbox" ${i.fait ? 'checked' : ''} onchange="toggleCheck(${i.id}, this.checked)">
+          <span>${esc(i.item)}</span>${i.date_verif ? `<span class="muted">(${fmtD(i.date_verif)})</span>` : ''}
+        </label>`).join('')}</div>` : ''}
+      <div class="sect">
+        <h4>Timeline (${acts.length})</h4>
+        ${acts.map(a => `<div class="tl-item">
+          <span class="dt">${a.statut === 'fait' ? fmtD(a.date_effectuee || a.created_at) : (a.date_prevue ? 'prévu ' + fmtD(a.date_prevue) : '–')}</span>
+          <span><span class="type">${TYPES_ACTION[a.type] || a.type}</span> <span class="${a.statut === 'fait' ? 'fait' : a.statut === 'a_faire' ? 'afaire' : 'muted'}">[${a.statut === 'a_faire' ? 'à faire' : a.statut}]</span>${a.commentaire ? '<br>' + esc(a.commentaire) : ''}</span>
+          <span class="actions-btns">
+            ${a.statut === 'a_faire' ? `<button class="btn sm" onclick="markDone(${a.id})">Fait ✓</button>` : ''}
+            <button class="btn sec sm" onclick="delAction(${a.id})">✕</button>
+          </span>
+        </div>`).join('') || '<div class="muted">Aucune action enregistrée.</div>'}
+        <div class="add-form">
+          <select id="a-type">${Object.entries(TYPES_ACTION).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+          <input type="date" id="a-date">
+          <select id="a-statut"><option value="a_faire">À faire</option><option value="fait">Fait</option></select>
+          <button class="btn" onclick="addAction(${c.id})">Ajouter l'action</button>
+          <textarea id="a-comm" placeholder="Commentaire (facultatif)"></textarea>
+        </div>
+      </div>
+      <div class="sect">
+        <h4>Notes</h4>
+        <textarea class="notes-area" id="f-notes">${esc(c.notes || '')}</textarea>
+        <div style="margin-top:8px"><button class="btn" onclick="saveNotes(${c.id})">Enregistrer les notes</button></div>
+      </div>
+    </div>`;
+  if (!keep) $('#drawer').scrollTop = 0;
+}
+function closeFiche() { $('#overlay').style.display = 'none'; $('#drawer').style.display = 'none'; currentCible = null; }
+$('#overlay').onclick = closeFiche;
+
+async function saveStatut(id) {
+  const s = $('#f-statut').value;
+  const { error } = await sb.from('cibles').update({ statut: s }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message); return; }
+  cibles.find(c => c.id === id).statut = s;
+  toast('Statut enregistré');
+  render();
+}
+async function saveNotes(id) {
+  const n = $('#f-notes').value;
+  const { error } = await sb.from('cibles').update({ notes: n }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message); return; }
+  cibles.find(c => c.id === id).notes = n;
+  toast('Notes enregistrées');
+}
+async function addAction(cid) {
+  const type = $('#a-type').value, date = $('#a-date').value || null, st = $('#a-statut').value, comm = $('#a-comm').value || null;
+  const row = { cible_id: cid, type, statut: st, commentaire: comm };
+  if (st === 'fait') row.date_effectuee = date || new Date().toISOString().slice(0, 10); else row.date_prevue = date;
+  const { data, error } = await sb.from('actions').insert(row).select();
+  if (error) { toast('Erreur : ' + error.message); return; }
+  actions.unshift(data[0]);
+  toast('Action ajoutée');
+  openFiche(cid, true);
+}
+async function markDone(aid) {
+  const { error } = await sb.from('actions').update({ statut: 'fait', date_effectuee: new Date().toISOString().slice(0, 10) }).eq('id', aid);
+  if (error) { toast('Erreur : ' + error.message); return; }
+  const a = actions.find(x => x.id === aid);
+  a.statut = 'fait'; a.date_effectuee = new Date().toISOString().slice(0, 10);
+  openFiche(a.cible_id, true);
+}
+async function delAction(aid) {
+  if (!confirm('Supprimer cette action ?')) return;
+  const { error } = await sb.from('actions').delete().eq('id', aid);
+  if (error) { toast('Erreur : ' + error.message); return; }
+  const a = actions.find(x => x.id === aid);
+  actions = actions.filter(x => x.id !== aid);
+  openFiche(a.cible_id, true);
+}
+
+init();
+</script>
+</body>
+</html>
