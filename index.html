@@ -117,6 +117,7 @@
   .add-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 52px; }
   .notes-area { width: 100%; min-height: 110px; padding: 10px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 13.5px; resize: vertical; }
   .muted { color: #999; font-size: 13px; }
+  .chk-lien { font-size: 12px; color: var(--vert-fonce); white-space: nowrap; margin-left: auto; }
 
   /* ---------- Séquence de messages ---------- */
   .msg-card { border: 1px solid var(--gris-clair); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; background: white; }
@@ -363,7 +364,7 @@ function renderPreflight() {
         </h3>
         ${items.map(i => `<label class="check-item ${i.fait ? 'done' : ''}">
           <input type="checkbox" ${i.fait ? 'checked' : ''} onchange="toggleCheck(${i.id}, this.checked)">
-          <span>${esc(i.item)}</span>
+          <span>${esc(i.item)}${i.commentaire ? `<br><small class="muted">${esc(i.commentaire)}</small>` : ''}</span>${i.lien ? ` <a class="chk-lien" href="${esc(i.lien)}" target="_blank" rel="noopener">vérifier ↗</a>` : ''}
           ${i.date_verif ? `<span class="muted">(${fmtD(i.date_verif)})</span>` : ''}
         </label>`).join('')}
       </div>`;
@@ -421,7 +422,7 @@ function openFiche(id, keep) {
       ${items.length ? `<div class="sect"><h4>Checklist pré-flight</h4>
         ${items.map(i => `<label class="check-item ${i.fait ? 'done' : ''}">
           <input type="checkbox" ${i.fait ? 'checked' : ''} onchange="toggleCheck(${i.id}, this.checked)">
-          <span>${esc(i.item)}</span>${i.date_verif ? `<span class="muted">(${fmtD(i.date_verif)})</span>` : ''}
+          <span>${esc(i.item)}${i.commentaire ? `<br><small class="muted">${esc(i.commentaire)}</small>` : ''}</span>${i.lien ? ` <a class="chk-lien" href="${esc(i.lien)}" target="_blank" rel="noopener">vérifier ↗</a>` : ''}${i.date_verif ? `<span class="muted">(${fmtD(i.date_verif)})</span>` : ''}
         </label>`).join('')}</div>` : ''}
       <div class="sect">
         <h4>Timeline (${acts.length})</h4>
