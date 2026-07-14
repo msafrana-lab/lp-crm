@@ -474,6 +474,15 @@ function nextType(c) {
   const done = new Set(actions.filter(a => a.cible_id === c.id && a.statut === 'fait').map(a => a.type));
   return SEQ_ORDER.find(t => !done.has(t)) || null;
 }
+function liProfile(c) {
+  return (c.linkedin_url && c.linkedin_url.startsWith('http')) ? c.linkedin_url :
+    'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(((c.decideur || c.societe) + '').replace(/\(.*?\)/g, '').trim());
+}
+function mailtoFor(c, m) {
+  const addr = ((c.email_retenu || '').match(/[\w.\-]+@[\w.\-]+/) || [''])[0];
+  if (!addr) return '';
+  return 'mailto:' + addr + '?subject=' + encodeURIComponent(m.objet || '') + '&body=' + encodeURIComponent(m.corps);
+}
 function renderSequence(c) {
   const msgs = messagesFor(c);
   if (!msgs.length) return '';
@@ -495,6 +504,7 @@ function renderSequence(c) {
         <pre class="msg-corps" id="${mid}">${esc(m.corps)}</pre>
         <div class="msg-btns">
           <button class="btn sm" onclick="copyTxt(this, ${m.id}, 'corps')">Copier le texte</button>
+          ${m.type === 'linkedin_j3' ? `<a class="btn sec sm" target="_blank" rel="noopener" href="${esc(liProfile(c))}">Ouvrir LinkedIn ↗</a>` : (mailtoFor(c, m) ? `<a class="btn sec sm" href="${esc(mailtoFor(c, m))}">Brouillon Outlook ↗</a>` : '')}
           ${!isDone ? `<button class="btn sec sm" onclick="markSent(${c.id}, '${m.type}')">Marquer envoyé aujourd'hui</button>` : ''}
         </div>
         ${m.remarque ? `<div class="msg-remarque">⚠ ${esc(m.remarque)}</div>` : ''}
