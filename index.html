@@ -117,6 +117,16 @@
   .add-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 52px; }
   .notes-area { width: 100%; min-height: 110px; padding: 10px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 13.5px; resize: vertical; }
   .muted { color: #999; font-size: 13px; }
+
+  /* ---------- Séquence de messages ---------- */
+  .msg-card { border: 1px solid var(--gris-clair); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; background: white; }
+  .msg-card.next { border-color: var(--fuchsia); box-shadow: 0 0 0 1px var(--fuchsia); }
+  .msg-card.done { opacity: .62; }
+  .msg-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .msg-objet { font-size: 13.5px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .msg-corps { white-space: pre-wrap; font-family: inherit; font-size: 13.5px; background: var(--fond); border: 1px solid #F1F0EF; border-radius: 4px; padding: 10px; max-height: 220px; overflow-y: auto; margin: 0 0 8px; }
+  .msg-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .msg-remarque { margin-top: 8px; font-size: 12.5px; color: #C77A2E; background: #FDF3E7; border-radius: 4px; padding: 6px 9px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--anthracite); color: white; padding: 10px 22px; border-radius: 20px; font-size: 14px; z-index: 200; display: none; }
   .rappel { background: #FDF3E7; border: 1px solid var(--peche); border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 </style>
@@ -167,7 +177,7 @@ const TYPES_ACTION = {
   reponse: 'Réponse reçue', note: 'Note', autre: 'Autre'
 };
 
-let cibles = [], actions = [], checklist = [], vagues = [];
+let cibles = [], actions = [], checklist = [], vagues = [], messages = [];
 let view = 'dashboard', currentCible = null;
 let filtres = { vague: '', canton: '', statut: '', prio: '', q: '' };
 let tri = { col: 'score', desc: true };
@@ -210,13 +220,14 @@ $('#btn-logout').onclick = () => sb.auth.signOut();
 
 // ---------- Data ----------
 async function loadAll() {
-  const [c, a, k, v] = await Promise.all([
+  const [c, a, k, v, m] = await Promise.all([
     sb.from('cibles').select('*').order('score', { ascending: false }),
     sb.from('actions').select('*').order('created_at', { ascending: false }),
     sb.from('checklist').select('*').order('id'),
-    sb.from('vagues').select('*').order('numero')
+    sb.from('vagues').select('*').order('numero'),
+    sb.from('messages').select('*').order('id')
   ]);
-  cibles = c.data || []; actions = a.data || []; checklist = k.data || []; vagues = v.data || [];
+  cibles = c.data || []; actions = a.data || []; checklist = k.data || []; vagues = v.data || []; messages = m.data || [];
 }
 
 // ---------- Navigation ----------
@@ -390,6 +401,7 @@ function openFiche(id, keep) {
           <button class="btn" onclick="saveStatut(${c.id})">Enregistrer</button>
         </div>
       </div>
+      ${renderSequence(c)}
       <div class="sect">
         <h4>Contact</h4>
         <div class="grid2">
@@ -437,6 +449,81 @@ function openFiche(id, keep) {
     </div>`;
   if (!keep) $('#drawer').scrollTop = 0;
 }
+
+// ---------- Séquence de messages ----------
+const SEQ_ORDER = ['linkedin_j3', 'email_j0', 'relance_j10', 'relance_j24'];
+const SEQ_STATUT = { linkedin_j3: 'LinkedIn J-3 envoyé', email_j0: 'Email J0 envoyé', relance_j10: 'Relance J+10 envoyée', relance_j24: 'Relance J+24 envoyée' };
+
+function segmentFor(c) {
+  if (c.canton === 'GE') return c.priorite === 'A' ? 'GE_A' : 'GE_B';
+  if (['VD', 'VD/Multi', 'Multi'].includes(c.canton)) return 'VD';
+  return 'VS_FR_JU';
+}
+function messagesFor(c) {
+  const out = [];
+  for (const t of SEQ_ORDER) {
+    const persos = messages.filter(m => m.cible_id === c.id && m.type === t);
+    if (persos.length) { out.push(...persos.map(m => ({ ...m, perso: true }))); continue; }
+    let gen = messages.filter(m => m.cible_id === null && m.type === t && (m.segment === segmentFor(c) || m.segment === null));
+    out.push(...gen.map(m => ({ ...m, perso: false })));
+  }
+  return out;
+}
+function nextType(c) {
+  const done = new Set(actions.filter(a => a.cible_id === c.id && a.statut === 'fait').map(a => a.type));
+  return SEQ_ORDER.find(t => !done.has(t)) || null;
+}
+function renderSequence(c) {
+  const msgs = messagesFor(c);
+  if (!msgs.length) return '';
+  const next = nextType(c);
+  const done = new Set(actions.filter(a => a.cible_id === c.id && a.statut === 'fait').map(a => a.type));
+  return `<div class="sect"><h4>Séquence de messages ${msgs.some(m => m.perso) ? '<span class="tag st">personnalisée</span>' : '<span class="tag B">gabarits — remplacer [Nom]</span>'}</h4>
+    ${msgs.map(m => {
+      const isNext = m.type === next;
+      const isDone = done.has(m.type);
+      const mid = 'msg_' + m.id;
+      return `<div class="msg-card ${isNext ? 'next' : ''} ${isDone ? 'done' : ''}">
+        <div class="msg-head">
+          <b>${TYPES_ACTION[m.type]}</b>
+          ${m.variante && m.variante !== 'perso' ? `<span class="muted">${esc(m.variante)}</span>` : ''}
+          ${isDone ? '<span class="tag st">envoyé ✓</span>' : isNext ? '<span class="tag A">prochain envoi</span>' : ''}
+          ${m.type === 'linkedin_j3' ? `<span class="muted">${m.corps.length} car.</span>` : ''}
+        </div>
+        ${m.objet ? `<div class="msg-objet">Objet : ${esc(m.objet)} <button class="btn sec sm" onclick="copyTxt(this, ${m.id}, 'objet')">Copier l'objet</button></div>` : ''}
+        <pre class="msg-corps" id="${mid}">${esc(m.corps)}</pre>
+        <div class="msg-btns">
+          <button class="btn sm" onclick="copyTxt(this, ${m.id}, 'corps')">Copier le texte</button>
+          ${!isDone ? `<button class="btn sec sm" onclick="markSent(${c.id}, '${m.type}')">Marquer envoyé aujourd'hui</button>` : ''}
+        </div>
+        ${m.remarque ? `<div class="msg-remarque">⚠ ${esc(m.remarque)}</div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+async function copyTxt(btn, mid, champ) {
+  const m = messages.find(x => x.id === mid);
+  try {
+    await navigator.clipboard.writeText(champ === 'objet' ? m.objet : m.corps);
+    const old = btn.textContent; btn.textContent = 'Copié ✓';
+    setTimeout(() => btn.textContent = old, 1500);
+  } catch (e) { toast('Copie impossible : ' + e.message); }
+}
+async function markSent(cid, type) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await sb.from('actions').insert({ cible_id: cid, type, statut: 'fait', date_effectuee: today, commentaire: 'Envoyé (marqué depuis la séquence)' }).select();
+  if (error) { toast('Erreur : ' + error.message); return; }
+  actions.unshift(data[0]);
+  const ns = SEQ_STATUT[type];
+  if (ns) {
+    const { error: e2 } = await sb.from('cibles').update({ statut: ns }).eq('id', cid);
+    if (!e2) cibles.find(c => c.id === cid).statut = ns;
+  }
+  toast(TYPES_ACTION[type] + ' marqué envoyé');
+  render();
+  openFiche(cid, true);
+}
+
 function closeFiche() { $('#overlay').style.display = 'none'; $('#drawer').style.display = 'none'; currentCible = null; }
 $('#overlay').onclick = closeFiche;
 
