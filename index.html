@@ -117,6 +117,8 @@
   .add-form textarea { grid-column: 1 / -1; resize: vertical; min-height: 52px; }
   .notes-area { width: 100%; min-height: 110px; padding: 10px; border: 1px solid var(--gris-clair); border-radius: 4px; font-family: inherit; font-size: 13.5px; resize: vertical; }
   .muted { color: #999; font-size: 13px; }
+  .fiche-links { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+  .fiche-links a { text-decoration: none; }
   .chk-lien { font-size: 12px; color: var(--vert-fonce); white-space: nowrap; margin-left: auto; }
 
   /* ---------- Séquence de messages ---------- */
@@ -393,6 +395,7 @@ function openFiche(id, keep) {
       <button class="close" onclick="closeFiche()">✕</button>
       <h2>${esc(c.societe)}</h2>
       <div class="muted">${esc(c.canton || '')} · ${esc(c.zone || '')} · Score ${c.score ?? '–'} · Prio ${c.priorite || '–'} · Vague ${c.vague ?? '–'}</div>
+      <div class="fiche-links">${ficheLinks(c)}</div>
     </div>
     <div class="body">
       <div class="sect">
@@ -415,6 +418,7 @@ function openFiche(id, keep) {
           <div><div class="k">LinkedIn</div><div class="v">${c.linkedin_url && c.linkedin_url.startsWith('http') ? `<a href="${esc(c.linkedin_url)}" target="_blank" rel="noopener">profil ↗</a>` : esc(c.linkedin_url || '–')}${c.linkedin_confiance ? ' <span class="muted">(' + esc(c.linkedin_confiance) + ')</span>' : ''}</div></div>
           <div><div class="k">FINMA</div><div class="v">${esc(c.finma || '–')}</div></div>
           <div><div class="k">Adresse</div><div class="v">${esc(c.adresse || '–')}</div></div>
+          <div><div class="k">Site web</div><div class="v">${c.site_web ? `<a href="${esc(c.site_web)}" target="_blank" rel="noopener">${esc(c.site_web.replace('https://',''))}</a>` : '–'}</div></div>
           <div><div class="k">Domaine vérifié</div><div class="v">${esc(c.domaine_verifie || '–')}</div></div>
         </div>
       </div>
@@ -482,6 +486,23 @@ function mailtoFor(c, m) {
   const addr = ((c.email_retenu || '').match(/[\w.\-]+@[\w.\-]+/) || [''])[0];
   if (!addr) return '';
   return 'mailto:' + addr + '?subject=' + encodeURIComponent(m.objet || '') + '&body=' + encodeURIComponent(m.corps);
+}
+function telHref(c) {
+  const m = (c.telephone || '').match(/\+?[\d][\d ().\/]{7,}/);
+  if (!m) return '';
+  return 'tel:' + m[0].replace(/[^\d+]/g, '');
+}
+function ficheLinks(c) {
+  const L = [];
+  if (c.site_web) L.push(`<a class="btn sec sm" target="_blank" rel="noopener" href="${esc(c.site_web)}">🌐 Site</a>`);
+  L.push(`<a class="btn sec sm" target="_blank" rel="noopener" href="${esc(liProfile(c))}">in LinkedIn</a>`);
+  const addr = ((c.email_retenu || '').match(/[\w.\-]+@[\w.\-]+/) || [''])[0];
+  if (addr) L.push(`<a class="btn sec sm" href="mailto:${esc(addr)}">✉ ${esc(addr)}</a>`);
+  const tel = telHref(c);
+  if (tel) L.push(`<a class="btn sec sm" href="${tel}">✆ Appeler</a>`);
+  L.push(`<a class="btn sec sm" target="_blank" rel="noopener" href="https://www.zefix.ch/fr/search/entity/list?name=${encodeURIComponent(c.societe)}">Zefix ↗</a>`);
+  L.push(`<a class="btn sec sm" target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(c.societe + ' ' + (c.canton || ''))}">Google ↗</a>`);
+  return L.join('');
 }
 function renderSequence(c) {
   const msgs = messagesFor(c);
