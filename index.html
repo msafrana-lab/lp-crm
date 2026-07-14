@@ -174,13 +174,17 @@ const STATUTS = [
   'VAGUE 0 — café direct', 'Via LinkedIn', 'Via formulaire site',
   'Sans suite', 'En veille', 'Écarté'
 ];
+const SIGNAL_TYPES = {
+  email_invalide: 'Email invalide / rebond', linkedin_errone: 'LinkedIn erroné', decideur_parti: 'Décideur parti',
+  lien_mort: 'Lien mort', texte_a_adapter: 'Texte à adapter', donnee_fausse: 'Donnée fausse', autre: 'Autre'
+};
 const TYPES_ACTION = {
   linkedin_j3: 'Note LinkedIn J-3', email_j0: 'Email J0', relance_j10: 'Relance J+10',
   relance_j24: 'Relance J+24', appel: 'Appel', cafe: 'Café', rdv: 'RDV',
   reponse: 'Réponse reçue', note: 'Note', autre: 'Autre'
 };
 
-let cibles = [], actions = [], checklist = [], vagues = [], messages = [];
+let cibles = [], actions = [], checklist = [], vagues = [], messages = [], signalements = [];
 let view = 'dashboard', currentCible = null;
 let filtres = { vague: '', canton: '', statut: '', prio: '', q: '' };
 let tri = { col: 'score', desc: true };
@@ -223,14 +227,15 @@ $('#btn-logout').onclick = () => sb.auth.signOut();
 
 // ---------- Data ----------
 async function loadAll() {
-  const [c, a, k, v, m] = await Promise.all([
+  const [c, a, k, v, m, g] = await Promise.all([
     sb.from('cibles').select('*').order('score', { ascending: false }),
     sb.from('actions').select('*').order('created_at', { ascending: false }),
     sb.from('checklist').select('*').order('id'),
     sb.from('vagues').select('*').order('numero'),
-    sb.from('messages').select('*').order('id')
+    sb.from('messages').select('*').order('id'),
+    sb.from('signalements').select('*').order('created_at', { ascending: false })
   ]);
-  cibles = c.data || []; actions = a.data || []; checklist = k.data || []; vagues = v.data || []; messages = m.data || [];
+  cibles = c.data || []; actions = a.data || []; checklist = k.data || []; vagues = v.data || []; messages = m.data || []; signalements = g.data || [];
 }
 
 // ---------- Navigation ----------
@@ -278,6 +283,17 @@ function renderDashboard() {
           return `<div class="todo-item" onclick="openFiche(${a.cible_id})">
             <span><b>${TYPES_ACTION[a.type] || a.type}</b> · ${esc(c ? c.societe : '?')}</span>
             <span class="d">${a.date_prevue ? fmtD(a.date_prevue) : 'sans date'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="panel">
+        <h3>Signalements ouverts (${signalements.filter(x => x.statut === 'ouvert').length})</h3>
+        ${signalements.filter(x => x.statut === 'ouvert').length === 0 ? '<div class="muted">Rien à signaler. Utilisez le bouton « Signaler » dans une fiche quand quelque chose ne fonctionne pas ; Claude les traite à la fin de vos rondes.</div>' : ''}
+        ${signalements.filter(x => x.statut === 'ouvert').map(x => {
+          const c = cibles.find(y => y.id === x.cible_id);
+          return `<div class="todo-item" onclick="${c ? `openFiche(${c.id})` : ''}">
+            <span><b>${esc(SIGNAL_TYPES[x.type] || x.type)}</b>${c ? ' · ' + esc(c.societe) : ''}<br><small class="muted">${esc(x.message)}</small></span>
+            <span class="d">${fmtD(x.created_at)}</span>
           </div>`;
         }).join('')}
       </div>
@@ -447,6 +463,18 @@ function openFiche(id, keep) {
         </div>
       </div>
       <div class="sect">
+        <h4>Signalements</h4>
+        ${signalements.filter(x => x.cible_id === id).map(x => `<div class="tl-item">
+          <span class="dt">${fmtD(x.created_at)}</span>
+          <span><b>${esc(SIGNAL_TYPES[x.type] || x.type)}</b> <span class="${x.statut === 'traite' ? 'fait' : 'afaire'}">[${x.statut === 'traite' ? 'traité' : 'ouvert'}]</span><br>${esc(x.message)}${x.reponse ? `<br><small class="muted">Réponse Claude (${fmtD(x.traite_le)}) : ${esc(x.reponse)}</small>` : ''}</span>
+        </div>`).join('')}
+        <div class="add-form">
+          <select id="s-type">${Object.entries(SIGNAL_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+          <button class="btn" onclick="addSignal(${c.id})">⚠ Signaler</button>
+          <textarea id="s-msg" placeholder="Décrivez le problème (ex : le profil LinkedIn n'est pas le bon, l'email a rebondi, le décideur a changé…)"></textarea>
+        </div>
+      </div>
+      <div class="sect">
         <h4>Notes</h4>
         <textarea class="notes-area" id="f-notes">${esc(c.notes || '')}</textarea>
         <div style="margin-top:8px"><button class="btn" onclick="saveNotes(${c.id})">Enregistrer les notes</button></div>
@@ -553,6 +581,16 @@ async function markSent(cid, type) {
   }
   toast(TYPES_ACTION[type] + ' marqué envoyé');
   render();
+  openFiche(cid, true);
+}
+
+async function addSignal(cid) {
+  const msg = $('#s-msg').value.trim();
+  if (!msg) { toast('Décrivez le problème avant de signaler'); return; }
+  const { data, error } = await sb.from('signalements').insert({ cible_id: cid, type: $('#s-type').value, message: msg }).select();
+  if (error) { toast('Erreur : ' + error.message); return; }
+  signalements.unshift(data[0]);
+  toast('Signalement enregistré — Claude le traitera à la fin de votre ronde');
   openFiche(cid, true);
 }
 
