@@ -571,9 +571,23 @@ async function copyTxt(btn, mid, champ) {
 }
 async function markSent(cid, type) {
   const today = new Date().toISOString().slice(0, 10);
-  const { data, error } = await sb.from('actions').insert({ cible_id: cid, type, statut: 'fait', date_effectuee: today, commentaire: 'Envoyé (marqué depuis la séquence)' }).select();
-  if (error) { toast('Erreur : ' + error.message); return; }
-  actions.unshift(data[0]);
+  // Si une action du même type est déjà planifiée pour cette cible, la clore plutôt que d'en
+  // créer une seconde : sinon le tableau de bord garde un doublon « à faire » indéfiniment.
+  const planifiee = actions
+    .filter(a => a.cible_id === cid && a.type === type && a.statut === 'a_faire')
+    .sort((a, b) => (a.date_prevue || '9999-12-31').localeCompare(b.date_prevue || '9999-12-31'))[0];
+  if (planifiee) {
+    const comm = (planifiee.commentaire ? planifiee.commentaire + ' → ' : '') + 'Envoyé le ' + today + ' (marqué depuis la séquence)';
+    const { data, error } = await sb.from('actions')
+      .update({ statut: 'fait', date_effectuee: today, commentaire: comm })
+      .eq('id', planifiee.id).select();
+    if (error) { toast('Erreur : ' + error.message); return; }
+    Object.assign(planifiee, data[0]);
+  } else {
+    const { data, error } = await sb.from('actions').insert({ cible_id: cid, type, statut: 'fait', date_effectuee: today, commentaire: 'Envoyé (marqué depuis la séquence)' }).select();
+    if (error) { toast('Erreur : ' + error.message); return; }
+    actions.unshift(data[0]);
+  }
   const ns = SEQ_STATUT[type];
   if (ns) {
     const { error: e2 } = await sb.from('cibles').update({ statut: ns }).eq('id', cid);
