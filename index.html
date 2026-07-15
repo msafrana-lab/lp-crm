@@ -131,6 +131,14 @@
   .msg-btns { display: flex; gap: 8px; flex-wrap: wrap; }
   .msg-remarque { margin-top: 8px; font-size: 12.5px; color: #C77A2E; background: #FDF3E7; border-radius: 4px; padding: 6px 9px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--anthracite); color: white; padding: 10px 22px; border-radius: 20px; font-size: 14px; z-index: 200; display: none; }
+  .file-row { display: flex; gap: 14px; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px dotted var(--gris-clair); }
+  .file-row:last-child { border-bottom: none; }
+  .file-main { flex: 1; min-width: 0; }
+  .file-main a { color: var(--anthracite); font-weight: bold; text-decoration: none; }
+  .file-main a:hover { color: var(--fuchsia); }
+  .file-side { text-align: right; white-space: nowrap; }
+  .file-side .d { color: #999; font-size: 12.5px; display: block; margin-bottom: 5px; }
+  .file-bloc { font-size: 12.5px; color: #C77A2E; background: #FDF3E7; border-radius: 4px; padding: 3px 8px; margin-top: 4px; display: inline-block; }
   .rappel { background: #FDF3E7; border: 1px solid var(--peche); border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 </style>
 </head>
@@ -149,7 +157,7 @@
     <nav>
       <button data-view="dashboard" class="active">Tableau de bord</button>
       <button data-view="pipeline">Pipeline</button>
-      <button data-view="preflight">Pré-flight vague 1</button>
+      <button data-view="file">File du jour</button>
     </nav>
     <span id="user-email"></span>
     <button id="btn-logout">Déconnexion</button>
@@ -186,8 +194,8 @@ const TYPES_ACTION = {
 
 let cibles = [], actions = [], checklist = [], vagues = [], messages = [], signalements = [];
 let view = 'dashboard', currentCible = null;
-let filtres = { vague: '', canton: '', statut: '', prio: '', q: '' };
-let tri = { col: 'score', desc: true };
+let filtres = { canton: '', statut: '', prio: '', q: '' };
+let tri = { col: 'next', desc: false };
 
 const $ = s => document.querySelector(s);
 const esc = s => (s == null ? '' : String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
@@ -248,7 +256,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 function render() {
   if (view === 'dashboard') renderDashboard();
   else if (view === 'pipeline') renderPipeline();
-  else renderPreflight();
+  else renderFile();
 }
 
 // ---------- Dashboard ----------
@@ -309,14 +317,14 @@ function renderDashboard() {
 // ---------- Pipeline ----------
 function renderPipeline() {
   let rows = cibles.filter(c =>
-    (!filtres.vague || String(c.vague) === filtres.vague) &&
     (!filtres.canton || c.canton === filtres.canton) &&
     (!filtres.statut || c.statut === filtres.statut) &&
     (!filtres.prio || c.priorite === filtres.prio) &&
     (!filtres.q || (c.societe + ' ' + (c.decideur || '') + ' ' + (c.email_retenu || '')).toLowerCase().includes(filtres.q.toLowerCase()))
   );
+  const triKey = (c, col) => col === 'next' ? ((nextAction(c) || {}).date_prevue || '9999-12-31') : c[col];
   rows.sort((a, b) => {
-    let va = a[tri.col], vb = b[tri.col];
+    let va = triKey(a, tri.col), vb = triKey(b, tri.col);
     if (va == null) return 1; if (vb == null) return -1;
     if (typeof va === 'string') { va = va.toLowerCase(); vb = String(vb).toLowerCase(); }
     return (va < vb ? -1 : va > vb ? 1 : 0) * (tri.desc ? -1 : 1);
@@ -329,10 +337,6 @@ function renderPipeline() {
     <div class="sub">${rows.length} cible(s) affichée(s) sur ${cibles.length}</div>
     <div class="filters">
       <input placeholder="Rechercher société, décideur, email…" value="${esc(filtres.q)}" oninput="filtres.q=this.value;renderPipeline()">
-      <select onchange="filtres.vague=this.value;renderPipeline()">
-        <option value="">Toutes vagues</option>
-        ${vagues.map(v => `<option value="${v.numero}" ${filtres.vague == v.numero ? 'selected' : ''}>Vague ${v.numero}</option>`).join('')}
-      </select>
       <select onchange="filtres.canton=this.value;renderPipeline()">
         <option value="">Tous cantons</option>
         ${cantons.map(x => `<option ${filtres.canton === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}
@@ -347,7 +351,7 @@ function renderPipeline() {
     </div>
     <table>
       <thead><tr>
-        ${[['societe', 'Société'], ['canton', 'Canton'], ['decideur', 'Décideur'], ['score', 'Score'], ['priorite', 'Prio'], ['vague', 'Vague'], ['statut', 'Statut']].map(([k, l]) =>
+        ${[['societe', 'Société'], ['canton', 'Canton'], ['decideur', 'Décideur'], ['score', 'Score'], ['priorite', 'Prio'], ['next', 'Prochaine action'], ['statut', 'Statut']].map(([k, l]) =>
           `<th onclick="setTri('${k}')">${l}${tri.col === k ? (tri.desc ? ' ▾' : ' ▴') : ''}</th>`).join('')}
       </tr></thead>
       <tbody>
@@ -357,7 +361,7 @@ function renderPipeline() {
           <td>${esc(c.decideur || '')}</td>
           <td>${c.score ?? ''}</td>
           <td><span class="tag ${c.priorite}">${c.priorite || ''}</span></td>
-          <td><span class="tag v${c.vague}">V${c.vague ?? '–'}</span></td>
+          <td>${(() => { const n = nextAction(c); return n ? `<span class="tag ${n.date_prevue && n.date_prevue < new Date().toISOString().slice(0,10) ? 'A' : 'st'}">${TYPES_ACTION[n.type] || n.type}${n.date_prevue ? ' · ' + fmtD(n.date_prevue) : ''}</span>` : '<span class="muted">–</span>'; })()}</td>
           <td><span class="tag st">${esc(c.statut)}</span></td>
         </tr>`).join('')}
       </tbody>
@@ -365,35 +369,73 @@ function renderPipeline() {
 }
 function setTri(col) { tri.desc = tri.col === col ? !tri.desc : true; tri.col = col; renderPipeline(); }
 
-// ---------- Pré-flight ----------
-function renderPreflight() {
-  const v1 = cibles.filter(c => c.vague === 1 && checklist.some(k => k.cible_id === c.id));
+// ---------- File du jour ----------
+// Prochaine action ouverte d'une cible (la plus proche dans le temps ; sans date = en dernier).
+function nextAction(c) {
+  return actions.filter(a => a.cible_id === c.id && a.statut === 'a_faire')
+    .sort((a, b) => (a.date_prevue || '9999-12-31').localeCompare(b.date_prevue || '9999-12-31'))[0] || null;
+}
+// Ce qui doit être levé avant d'envoyer : vérifications non cochées, adresse non confirmée, signalement ouvert.
+function blocages(c, a) {
+  const out = [];
+  checklist.filter(k => k.cible_id === c.id && !k.fait).forEach(k => out.push('Vérifier : ' + k.item));
+  if (a && a.type === 'email_j0' && /déduit|candidat|identifier|tester|vérifier/i.test(c.statut_email || ''))
+    out.push('Adresse à confirmer par test bcc : ' + (c.email_retenu || '–'));
+  if (signalements.some(x => x.cible_id === c.id && x.statut === 'ouvert')) out.push('Signalement ouvert non traité');
+  return out;
+}
+function renderFile() {
+  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date(); d.setDate(d.getDate() + (7 - (d.getDay() || 7)));
+  const finSemaine = d.toISOString().slice(0, 10);
+  const ouvertes = actions.filter(a => a.statut === 'a_faire')
+    .map(a => ({ a, c: cibles.find(x => x.id === a.cible_id) }))
+    .filter(x => x.c && !['Écarté', 'En veille', 'Sans suite'].includes(x.c.statut))
+    .sort((x, y) => (x.a.date_prevue || '9999-12-31').localeCompare(y.a.date_prevue || '9999-12-31'));
+
+  const groupes = [
+    ['En retard', ouvertes.filter(x => x.a.date_prevue && x.a.date_prevue < today)],
+    ["Aujourd'hui", ouvertes.filter(x => x.a.date_prevue === today)],
+    ['Cette semaine', ouvertes.filter(x => x.a.date_prevue > today && x.a.date_prevue <= finSemaine)],
+    ['Plus tard', ouvertes.filter(x => x.a.date_prevue > finSemaine)],
+    ['Sans date', ouvertes.filter(x => !x.a.date_prevue)]
+  ];
+
   $('#main').innerHTML = `
-    <h2>Pré-flight vague 1</h2>
-    <div class="sub">Checklist avant envoi pour les cibles prêtes (données de qualification du 12-18.06 : à revérifier avant J0)</div>
-    <div class="rappel">Rappels : emails un à un, jamais d'envoi de masse · adresses déduites = test bcc obligatoire · CGA Conseils = vague 0, café direct, jamais de cold email.</div>
-    ${v1.map(c => {
-      const items = checklist.filter(k => k.cible_id === c.id);
-      const done = items.filter(i => i.fait).length;
-      return `<div class="panel" style="margin-bottom:14px">
-        <h3 style="display:flex;justify-content:space-between;cursor:pointer" onclick="openFiche(${c.id})">
-          <span>${esc(c.societe)} — ${esc(c.decideur || '')}</span>
-          <span style="color:${done === items.length ? 'var(--vert)' : 'var(--saumon)'}">${done}/${items.length}</span>
-        </h3>
-        ${items.map(i => `<label class="check-item ${i.fait ? 'done' : ''}">
-          <input type="checkbox" ${i.fait ? 'checked' : ''} onchange="toggleCheck(${i.id}, this.checked)">
-          <span>${esc(i.item)}${i.commentaire ? `<br><small class="muted">${esc(i.commentaire)}</small>` : ''}</span>${i.lien ? ` <a class="chk-lien" href="${esc(i.lien)}" target="_blank" rel="noopener">vérifier ↗</a>` : ''}
-          ${i.date_verif ? `<span class="muted">(${fmtD(i.date_verif)})</span>` : ''}
-        </label>`).join('')}
-      </div>`;
-    }).join('') || '<div class="muted">Aucune cible avec checklist.</div>'}`;
+    <h2>File du jour</h2>
+    <div class="sub">${ouvertes.length} action(s) ouverte(s) sur les cibles actives · les blocages à lever avant envoi sont signalés sous chaque ligne</div>
+    <div class="rappel">Rappels : emails un à un, jamais d'envoi de masse · adresse déduite = test bcc obligatoire avant le J0 · CGA Conseils = café direct, jamais de cold email.</div>
+    ${groupes.filter(([, l]) => l.length).map(([titre, liste]) => `
+      <div class="panel" style="margin-bottom:16px">
+        <h3>${titre} (${liste.length})</h3>
+        ${liste.map(({ a, c }) => {
+          const bl = blocages(c, a);
+          const msg = messagesFor(c).find(m => m.type === a.type);
+          return `<div class="file-row">
+            <div class="file-main">
+              <div><b>${TYPES_ACTION[a.type] || a.type}</b> · <a href="javascript:void(0)" onclick="openFiche(${c.id})">${esc(c.societe)}</a>
+                <span class="muted">${esc(c.decideur || '')}${c.canton ? ' · ' + esc(c.canton) : ''}</span></div>
+              ${a.commentaire ? `<div class="muted" style="margin-top:2px">${esc(a.commentaire)}</div>` : ''}
+              ${bl.map(b => `<div class="file-bloc">⚠ ${esc(b)}</div>`).join('')}
+            </div>
+            <div class="file-side">
+              <span class="d">${a.date_prevue ? fmtD(a.date_prevue) : 'sans date'}</span>
+              <div class="msg-btns" style="justify-content:flex-end">
+                ${a.type === 'linkedin_j3' ? `<a class="btn sec sm" target="_blank" rel="noopener" href="${esc(liProfile(c))}">LinkedIn ↗</a>` : ''}
+                ${msg && a.type !== 'linkedin_j3' && mailtoFor(c, msg) ? `<a class="btn sec sm" href="${esc(mailtoFor(c, msg))}">Brouillon ↗</a>` : ''}
+                ${SEQ_ORDER.includes(a.type) ? `<button class="btn sm" onclick="markSent(${c.id}, '${a.type}')">Envoyé ✓</button>` : `<button class="btn sm" onclick="markDone(${a.id})">Fait ✓</button>`}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`).join('') || '<div class="muted">Aucune action ouverte. Tout est traité.</div>'}`;
 }
 async function toggleCheck(id, val) {
   const { error } = await sb.from('checklist').update({ fait: val, date_verif: val ? new Date().toISOString().slice(0, 10) : null }).eq('id', id);
   if (error) { toast('Erreur : ' + error.message); return; }
   const it = checklist.find(k => k.id === id);
   if (it) { it.fait = val; it.date_verif = val ? new Date().toISOString().slice(0, 10) : null; }
-  if (view === 'preflight') renderPreflight();
+  if (view === 'file') renderFile();
   if (currentCible) openFiche(currentCible, true);
 }
 
